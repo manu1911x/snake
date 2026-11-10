@@ -4,7 +4,7 @@
 #define ANCHO 80
 #define ALTO  40
 
-// Inicializa tamaño, modo raw y dibuja marco (activar=1), o restaura terminal (activar=0)
+// Inicializa la consola y dibuja el marco (activar=1), o la restaura (activar=0)
 void init_terminal(int trigger);
 
 // Mueve el cursor a una coordenada (1-indexada)
