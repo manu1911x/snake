@@ -1,27 +1,39 @@
 #include <stdio.h>
-#include <unistd.h>
-#include <termios.h>
+#include <conio.h>
+#include <windows.h>
+#include "menu.h"
 
 void mcursor(int fila, int col) {
-  //Mueve el cursor a las coordenada seleccionadas
-  printf("\033[%d;%dH", fila, col);
+  COORD position = {(SHORT)(col - 1), (SHORT)(fila - 1)};
+  SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
 }
 
 void init_terminal(int trigger) {
-  static struct termios orig;
+  static CONSOLE_CURSOR_INFO original_cursor;
+  static HANDLE console;
 
   if (trigger) {
-    // Configurar terminal y ocultar cursor
-    tcgetattr(0, &orig);
-    struct termios raw = orig;
-    raw.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(0, TCSANOW, &raw);
-    printf("\033[?25l");
+    console = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleCursorInfo(console, &original_cursor);
 
-    // Fijar resolucion y limpiar pantalla
-    printf("\033[8;%d;%dt\033[2J\033[H", ALTO, ANCHO);
+    CONSOLE_CURSOR_INFO cursor = original_cursor;
+    cursor.bVisible = FALSE;
+    SetConsoleCursorInfo(console, &cursor);
 
-    // Dibujar bordes horizontales
+    COORD size = {(SHORT)ANCHO, (SHORT)ALTO};
+    SMALL_RECT window = {0, 0, (SHORT)(ANCHO - 1), (SHORT)(ALTO - 1)};
+    SetConsoleScreenBufferSize(console, size);
+    SetConsoleWindowInfo(console, TRUE, &window);
+
+    DWORD cells = (DWORD)ANCHO * ALTO;
+    DWORD written;
+    COORD origin = {0, 0};
+    FillConsoleOutputCharacterA(console, ' ', cells, origin, &written);
+    FillConsoleOutputAttribute(console,
+                               FOREGROUND_RED | FOREGROUND_GREEN |
+                                   FOREGROUND_BLUE,
+                               cells, origin, &written);
+
     mcursor(1, 1);
     putchar('+');
     for (int i = 2; i < ANCHO; i++) putchar('-');
@@ -39,20 +51,21 @@ void init_terminal(int trigger) {
     }
     fflush(stdout);
   } else {
-    // Restaurar terminal y mostrar cursor
-    tcsetattr(0, TCSANOW, &orig);
-    printf("\033[?25h\033[2J\033[H");
+    CONSOLE_CURSOR_INFO cursor = original_cursor;
+    SetConsoleCursorInfo(console, &cursor);
+    COORD origin = {0, 0};
+    SetConsoleCursorPosition(console, origin);
+    DWORD cells = (DWORD)ANCHO * ALTO;
+    DWORD written;
+    FillConsoleOutputCharacterA(console, ' ', cells, origin, &written);
     fflush(stdout);
   }
 }
 
 int init_menu(void) {
   int sel = 0; // 0 = Jugar, 1 = Salir
-  char c;
 
   while (1) {
-
-    // Imprime menu centrado
     mcursor(ALTO / 2 -8, (ANCHO - 5) / 2);
     printf("SNAKE");
 
@@ -63,21 +76,12 @@ int init_menu(void) {
     printf("%s SALIR ", (sel == 1) ? ">" : " ");
     fflush(stdout);
 
-    // Lectura dinamica de inputs (tiempo real)
-    read(0, &c, 1);
-    if (c == '\033') {
-      // Las flechas dan como output codigo ANSI que se debe leer de manera diferente
-      char seq[2];
-      read(0, &seq[0], 1);
-      read(0, &seq[1], 1);
-      if (seq[0] == '[' && (seq[1] == 'A' || seq[1] == 'B')) {
-        // Se alterna el valor de seleccion entre 0 y 1
-        sel = !sel;
-      }
-    } else if (c == '\n' || c == '\r') {
+    int key = _getch();
+    if (key == 0 || key == 224) {
+      key = _getch();
+      if (key == 72 || key == 80) sel = !sel;
+    } else if (key == '\r' || key == '\n') {
       return sel;
     }
   }
 }
-
-
